@@ -94,6 +94,24 @@ table.ltable tr:hover td{background:var(--bg)}
 .empty i{font-size:40px;margin-bottom:12px;display:block}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--text2)}
 .legend-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
+
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%);transition:transform .25s;width:240px;z-index:50}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0!important}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .two-col{grid-template-columns:1fr}
+  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40}
+  .mobile-overlay.open{display:block}
+  .mobile-menu-btn{display:flex!important}
+  .content{padding:12px}
+  .topbar{padding:10px 12px}
+  table.ltable th:nth-child(3),table.ltable td:nth-child(3){display:none}
+}
+@media(min-width:769px){
+  .mobile-menu-btn{display:none!important}
+  .mobile-overlay{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -125,8 +143,9 @@ table.ltable tr:hover td{background:var(--bg)}
     <div class="sidebar-footer">link-rotator v1.0</div>
   </aside>
   <div class="main">
-    <div class="topbar">
-      <h1 id="page-title">Обзор</h1>
+    <div class="mobile-overlay" id="mob-overlay" onclick="toggleSidebar()"></div>
+<div class="topbar">
+      <div style="display:flex;align-items:center;gap:10px"><button class="mobile-menu-btn icon-btn" onclick="toggleSidebar()" style="display:none;width:36px;height:36px"><i class="ti ti-menu-2" style="font-size:20px"></i></button><h1 id="page-title">Обзор</h1></div>
     </div>
     <div class="content">
       <div id="page-stats">
@@ -279,6 +298,13 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
 });
 
+
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('mob-overlay').classList.toggle('open');
+}
+// Закрываем сайдбар при навигации на мобиле
+const origNav = nav;
 let currentPage='stats',currentPeriod=30,editingId=null,chart=null;
 function nav(page){
   currentPage=page;
@@ -287,7 +313,8 @@ function nav(page){
   document.getElementById('page-stats').style.display=page==='stats'?'':'none';
   document.getElementById('page-links').style.display=page==='links'?'':'none';
   document.getElementById('page-title').textContent={stats:'Обзор',links:'Ссылки'}[page];
-  if(page==='links')loadLinks();
+  if(window.innerWidth<=768){document.querySelector('.sidebar').classList.remove('open');document.getElementById('mob-overlay').classList.remove('open');}
+if(page==='links')loadLinks();
   if(page==='stats')loadStats(currentPeriod);
 }
 async function loadStats(days){
