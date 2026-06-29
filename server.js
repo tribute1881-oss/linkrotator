@@ -1,4 +1,5 @@
 const fs = require('fs');
+if (!fs.existsSync('data')) fs.mkdirSync('data');
 
 const express = require('express');
 const path = require('path');
@@ -7,7 +8,7 @@ const initSqlJs = require('sql.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, 'data', 'links.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'links.db');
 
 let db;
 
