@@ -4,6 +4,7 @@ if (!fs.existsSync('data')) fs.mkdirSync('data');
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const { sessions, requireAuth, AUTH_USER, AUTH_PASS } = require('./auth');
 const initSqlJs = require('sql.js');
 
 const app = express();
@@ -60,6 +61,22 @@ function run(sql, params) {
 }
 
 app.use(express.json());
+
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  if (username === AUTH_USER && password === AUTH_PASS) {
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessions.add(token);
+    res.json({ token });
+  } else {
+    res.status(401).json({ error: 'Неверный логин или пароль' });
+  }
+});
+app.post('/api/logout', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  sessions.delete(token);
+  res.json({ ok: true });
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/r/:slug', (req, res) => {
@@ -83,7 +100,7 @@ app.get('/api/links', (req, res) => {
   res.json(links);
 });
 
-app.post('/api/links', (req, res) => {
+app.post('/api/links', requireAuth, (req, res) => {
   const { name, destination, slug, enabled = 1, stub_text = '' } = req.body;
   if (!name || !destination) return res.status(400).json({ error: 'name и destination обязательны' });
   const finalSlug = slug || Math.random().toString(36).slice(2, 8);
@@ -96,7 +113,7 @@ app.post('/api/links', (req, res) => {
   }
 });
 
-app.put('/api/links/:id', (req, res) => {
+app.put('/api/links/:id', requireAuth, (req, res) => {
   const rows = query('SELECT * FROM links WHERE id = ?', [req.params.id]);
   if (!rows.length) return res.status(404).json({ error: 'Не найдено' });
   const l = rows[0];
@@ -114,7 +131,7 @@ app.put('/api/links/:id', (req, res) => {
   }
 });
 
-app.delete('/api/links/:id', (req, res) => {
+app.delete('/api/links/:id', requireAuth, (req, res) => {
   run('DELETE FROM links WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 });

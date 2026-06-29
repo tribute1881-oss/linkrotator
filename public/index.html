@@ -97,6 +97,23 @@ table.ltable tr:hover td{background:var(--bg)}
 </style>
 </head>
 <body>
+
+<div id="login-screen" style="position:fixed;inset:0;background:#f8f8f7;display:flex;align-items:center;justify-content:center;z-index:9999">
+  <div style="background:#fff;border:1px solid #e3e2dd;border-radius:12px;padding:32px;width:320px;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <div style="font-size:20px;font-weight:600;margin-bottom:6px;text-align:center">Main Office</div>
+    <div style="font-size:13px;color:#898780;text-align:center;margin-bottom:24px">Панель управления ссылками</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:500;color:#52514e;display:block;margin-bottom:5px">Логин</label>
+      <input id="login-user" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid #c8c7c2;background:#f8f8f7;font-size:13px;font-family:inherit;box-sizing:border-box" placeholder="admin" />
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:500;color:#52514e;display:block;margin-bottom:5px">Пароль</label>
+      <input id="login-pass" type="password" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid #c8c7c2;background:#f8f8f7;font-size:13px;font-family:inherit;box-sizing:border-box" placeholder="••••••••" />
+    </div>
+    <div id="login-err" style="color:#e34948;font-size:12px;margin-bottom:12px;display:none;text-align:center"></div>
+    <button onclick="doLogin()" style="width:100%;padding:9px;border-radius:8px;border:none;background:#0b0b0a;color:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Войти</button>
+  </div>
+</div>
 <div class="app">
   <aside class="sidebar">
     <div class="logo"><i class="ti ti-link"></i>Main Office</div>
@@ -215,6 +232,53 @@ table.ltable tr:hover td{background:var(--bg)}
 </div>
 <div class="toast" id="toast"></div>
 <script>
+
+let authToken = localStorage.getItem('auth_token') || '';
+
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value.trim();
+  if (!username || !password) return;
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await r.json();
+    if (data.token) {
+      authToken = data.token;
+      localStorage.setItem('auth_token', authToken);
+      document.getElementById('login-screen').style.display = 'none';
+      loadStats(30);
+    } else {
+      const err = document.getElementById('login-err');
+      err.textContent = data.error || 'Ошибка входа';
+      err.style.display = 'block';
+    }
+  } catch(e) {
+    const err = document.getElementById('login-err');
+    err.textContent = 'Ошибка соединения';
+    err.style.display = 'block';
+  }
+}
+
+async function checkAuth() {
+  if (!authToken) { showLogin(); return; }
+  const r = await fetch('/api/links', { headers: {'x-auth-token': authToken} });
+  if (r.status === 401) { showLogin(); return; }
+  document.getElementById('login-screen').style.display = 'none';
+  loadStats(30);
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+});
+
 let currentPage='stats',currentPeriod=30,editingId=null,chart=null;
 function nav(page){
   currentPage=page;
@@ -228,7 +292,7 @@ function nav(page){
 }
 async function loadStats(days){
   try{
-    const r=await fetch('/api/stats?days='+days);
+    const r=await fetch('/api/stats?days='+days, {headers:{'x-auth-token':authToken}});
     const data=await r.json();
     document.getElementById('s-total').textContent=data.totals.clicks;
     document.getElementById('s-unique').textContent=data.totals.unique;
@@ -273,7 +337,7 @@ function buildTopLinks(links){
 }
 async function loadLinks(){
   try{
-    const r=await fetch('/api/links');
+    const r=await fetch('/api/links', {headers:{'x-auth-token':authToken}});
     const links=await r.json();
     document.getElementById('links-count').textContent='Ссылок: '+links.length;
     renderLinks(links);
@@ -288,13 +352,13 @@ function renderLinks(links){
 }
 async function toggleLink(id,btn){
   const isOn=btn.classList.contains('on');
-  await fetch('/api/links/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!isOn})});
+  await fetch('/api/links/'+id,{method:'PUT',headers:{'Content-Type':'application/json','x-auth-token':authToken},body:JSON.stringify({enabled:!isOn})});
   btn.classList.toggle('on');
   showToast(isOn?'Ссылка выключена':'Ссылка включена');
 }
 async function deleteLink(id){
   if(!confirm('Удалить ссылку?'))return;
-  await fetch('/api/links/'+id,{method:'DELETE'});
+  await fetch('/api/links/'+id,{method:'DELETE',headers:{'x-auth-token':authToken}});
   showToast('Удалено');loadLinks();
 }
 function copySlug(slug){
@@ -313,7 +377,7 @@ function openModal(){
   document.getElementById('modal').classList.add('open');
 }
 async function editLink(id){
-  const r=await fetch('/api/links');
+  const r=await fetch('/api/links', {headers:{'x-auth-token':authToken}});
   const links=await r.json();
   const l=links.find(x=>x.id===id);if(!l)return;
   editingId=id;
@@ -341,7 +405,7 @@ async function saveLink(){
   try{
     const method=editingId?'PUT':'POST';
     const url=editingId?'/api/links/'+editingId:'/api/links';
-    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json','x-auth-token':authToken},body:JSON.stringify(payload)});
     const data=await r.json();
     if(data.error){showToast(data.error,true);return;}
     closeModal();showToast(editingId?'Ссылка обновлена!':'Ссылка создана!');
@@ -359,7 +423,7 @@ function showToast(msg,isError=false){
 }
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-loadStats(30);
+checkAuth();
 </script>
 </body>
 </html>
