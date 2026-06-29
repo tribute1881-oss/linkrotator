@@ -1,7 +1,8 @@
 ﻿const fs = require('fs');
 let html = fs.readFileSync('public/index.html', 'utf8');
 
-const loginHTML = `
+if (!html.includes('login-screen')) {
+    const loginHTML = `
 <div id="login-screen" style="position:fixed;inset:0;background:#f8f8f7;display:flex;align-items:center;justify-content:center;z-index:9999">
   <div style="background:#fff;border:1px solid #e3e2dd;border-radius:12px;padding:32px;width:320px;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
     <div style="font-size:20px;font-weight:600;margin-bottom:6px;text-align:center">Main Office</div>
@@ -20,7 +21,10 @@ const loginHTML = `
 </div>
 `;
 
-const loginScript = `
+    // Кнопка выхода в правом верхнем углу интерфейса
+    const logoutBtn = `\n<button onclick="doLogout()" style="position:fixed;top:20px;right:20px;padding:8px 16px;border-radius:8px;border:1px solid #e3e2dd;background:#fff;cursor:pointer;font-size:13px;font-weight:500;color:#52514e;z-index:9998;box-shadow:0 2px 8px rgba(0,0,0,0.05)">Выйти</button>`;
+
+    const loginScript = `
 let authToken = localStorage.getItem('auth_token') || '';
 
 async function doLogin() {
@@ -38,6 +42,8 @@ async function doLogin() {
       authToken = data.token;
       localStorage.setItem('auth_token', authToken);
       document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('login-user').value = '';
+      document.getElementById('login-pass').value = '';
       loadStats(30);
     } else {
       const err = document.getElementById('login-err');
@@ -51,16 +57,36 @@ async function doLogin() {
   }
 }
 
+async function doLogout() {
+  if (authToken) {
+    await fetch('/api/logout', { method: 'POST', headers: { 'x-auth-token': authToken } }).catch(() => {});
+  }
+  authToken = '';
+  localStorage.removeItem('auth_token');
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
 async function checkAuth() {
   if (!authToken) { showLogin(); return; }
-  const r = await fetch('/api/links', { headers: {'x-auth-token': authToken} });
-  if (r.status === 401) { showLogin(); return; }
-  document.getElementById('login-screen').style.display = 'none';
-  loadStats(30);
+  try {
+    const r = await fetch('/api/links', { headers: {'x-auth-token': authToken} });
+    if (r.status === 401) {
+      // Токен устарел или сервер перезагружался (сессии сбросились)
+      authToken = '';
+      localStorage.removeItem('auth_token');
+      showLogin();
+      return;
+    }
+    document.getElementById('login-screen').style.display = 'none';
+    loadStats(30);
+  } catch(e) {
+    showLogin();
+  }
 }
 
 function showLogin() {
   document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-err').style.display = 'none';
 }
 
 document.addEventListener('keydown', e => {
@@ -68,39 +94,37 @@ document.addEventListener('keydown', e => {
 });
 `;
 
-// Добавляем форму входа в body
-html = html.replace('<div class="app">', loginHTML + '<div class="app">');
+    html = html.replace('<div class="app">', loginHTML + logoutBtn + '\n<div class="app">');
 
-// Добавляем токен ко всем fetch запросам к API
-html = html.replace(/fetch\('\/api\//g, "fetch('/api/");
-html = html.replace(
-  /headers:\{'Content-Type':'application\/json'\}/g,
-  "headers:{'Content-Type':'application/json','x-auth-token':authToken}"
-);
-html = html.replace(
-  /method:'DELETE'\}/g,
-  "method:'DELETE',headers:{'x-auth-token':authToken}}"
-);
-html = html.replace(
-  /method:'PUT',headers:\{'Content-Type':'application\/json','x-auth-token':authToken\}/g,
-  "method:'PUT',headers:{'Content-Type':'application/json','x-auth-token':authToken}"
-);
+    // Инъекция заголовков для fetch запросов
+    html = html.replace(
+      /headers:\{'Content-Type':'application\/json'\}/g,
+      "headers:{'Content-Type':'application/json','x-auth-token':authToken}"
+    );
+    html = html.replace(
+      /method:'DELETE'\}/g,
+      "method:'DELETE',headers:{'x-auth-token':authToken}}"
+    );
+    html = html.replace(
+      /method:'PUT',headers:\{'Content-Type':'application\/json','x-auth-token':authToken\}/g,
+      "method:'PUT',headers:{'Content-Type':'application/json','x-auth-token':authToken}"
+    );
 
-// GET запросы тоже защищаем
-html = html.replace(
-  /await fetch\('\/api\/links'\)/g,
-  "await fetch('/api/links', {headers:{'x-auth-token':authToken}})"
-);
-html = html.replace(
-  /await fetch\('\/api\/stats\?days='\+days\)/g,
-  "await fetch('/api/stats?days='+days, {headers:{'x-auth-token':authToken}})"
-);
+    // Защита GET запросов (без дублирования при повторном запуске скрипта)
+    html = html.replace(
+      /await fetch\('\/api\/links'\)/g,
+      "await fetch('/api/links', {headers:{'x-auth-token':authToken}})"
+    );
+    html = html.replace(
+      /await fetch\('\/api\/stats\?days='\+days\)/g,
+      "await fetch('/api/stats?days='+days, {headers:{'x-auth-token':authToken}})"
+    );
 
-// Заменяем loadStats(30) в конце на checkAuth()
-html = html.replace(/^loadStats\(30\);/m, 'checkAuth();');
+    html = html.replace(/^loadStats\(30\);/m, 'checkAuth();');
+    html = html.replace('<script>', '<script>\n' + loginScript);
 
-// Добавляем скрипт авторизации
-html = html.replace('<script>', '<script>\n' + loginScript);
-
-fs.writeFileSync('public/index.html', html);
-console.log('Done');
+    fs.writeFileSync('public/index.html', html);
+    console.log('index.html обновлен');
+} else {
+    console.log('index.html уже содержит форму авторизации');
+}
