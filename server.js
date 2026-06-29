@@ -132,7 +132,7 @@ app.get('/api/stats', (req, res) => {
     const t = totals[0] || {};
     res.json({ totals: { clicks: t.total_clicks || 0, unique: t.unique_clicks || 0, links: (linksCount[0] || {}).n || 0, active: (activeCount[0] || {}).n || 0 }, chart: chart || [], topLinks: topLinks || [] });
   } catch(e) {
-    console.error('Stats error:', e.message);
+    console.error('Stats error:', e.message, e.stack);
     res.status(500).json({ error: e.message });
   }
 });
