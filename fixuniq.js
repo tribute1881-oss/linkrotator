@@ -1,0 +1,10 @@
+﻿const fs = require('fs');
+let s = fs.readFileSync('server.js', 'utf8');
+s = s.replace(/COUNT\(DISTINCT ip_hash\) as unique/g, 'COUNT(DISTINCT ip_hash) as uniq');
+s = s.replace(/as unique FROM/g, 'as uniq FROM');
+s = s.replace(/\.unique_clicks/g, '.uniq_clicks');
+s = s.replace(/unique_clicks/g, 'uniq_clicks');
+s = s.replace(/r\.unique/g, 'r.uniq');
+s = s.replace(/row\.unique/g, 'row.uniq');
+fs.writeFileSync('server.js', s);
+console.log('Done');
